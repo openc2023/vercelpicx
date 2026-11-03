@@ -1,20 +1,31 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import PicxIcon from '@/components/picx-icon/picx-icon.vue'
+import { store } from '@/stores'
+
+const userSettings = computed(() => store.getters.getUserSettings).value
+const globalSettings = computed(() => store.getters.getGlobalSettings).value
+
+const persistUserSettings = () => {
+  store.dispatch('USER_SETTINGS_PERSIST')
+}
+</script>
+
 <template>
   <el-popover
-    placement="bottom-end"
+    placement="top-start"
     :width="globalSettings.language === 'en' ? '230rem' : '190rem'"
     trigger="click"
     :show-arrow="false"
     :popper-style="{
-      padding: '0',
+      'padding': '0',
       'border-radius': '10rem',
-      overflow: 'hidden'
+      'overflow': 'hidden',
     }"
   >
     <template #reference>
-      <el-button circle text>
-        <el-icon :size="22">
-          <IEpOperation />
-        </el-icon>
+      <el-button class="quick-actions-btn" circle text :aria-label="$t('nav.actions')" :title="$t('nav.actions')">
+        <PicxIcon name="settings" :size="22" />
       </el-button>
     </template>
     <div class="quick-actions-popover">
@@ -36,15 +47,3 @@
     </div>
   </el-popover>
 </template>
-
-<script setup lang="ts">
-import { computed } from 'vue'
-import { store } from '@/stores'
-
-const userSettings = computed(() => store.getters.getUserSettings).value
-const globalSettings = computed(() => store.getters.getGlobalSettings).value
-
-const persistUserSettings = () => {
-  store.dispatch('USER_SETTINGS_PERSIST')
-}
-</script>

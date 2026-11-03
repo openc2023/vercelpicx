@@ -1,105 +1,79 @@
-import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router'
-import login from '@/views/picx-login/picx-login.vue'
-import upload from '@/views/upload-image/upload-image.vue'
-import management from '@/views/imgs-management/imgs-management.vue'
-import settings from '@/views/picx-settings/picx-settings.vue'
-import toolbox from '@/views/picx-toolbox/picx-toolbox.vue'
-import feedback from '@/views/feedback-info/feedback-info.vue'
-import compressTool from '@/components/tools/compress-tool/compress-tool.vue'
-import base64Tool from '@/components/tools/base64-tool/base64-tool.vue'
-import watermarkTool from '@/components/tools/watermark-tool/watermark-tool.vue'
+import type { RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
+import { store } from '@/stores'
 import { setWindowTitle } from '@/utils'
+import { connectionLocation, legacyConfigLocation, readAuthorizationCallback } from '@/utils/login-navigation'
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'login',
-    component: login,
+    component: () => import('@/views/picx-login/picx-login.vue'),
     meta: {
-      title: 'login'
-    }
+      title: 'login',
+    },
   },
   {
     path: '/config',
     name: 'config',
-    component: () => import('@/views/picx-config/picx-config.vue'),
-    meta: {
-      title: 'nav.config'
-    }
+    redirect: (to) => {
+      if (readAuthorizationCallback(new URL(window.location.href)))
+        return { path: '/', query: to.query }
+      const config = store.getters.getUserConfigInfo
+      return legacyConfigLocation(to.query, { complete: Boolean(config.token && config.logined && config.owner && config.repo && config.branch), hasDirectory: Boolean(config.selectedDir) })
+    },
+  },
+  {
+    path: '/login',
+    redirect: to => ({ path: '/', query: to.query }),
   },
   {
     path: '/upload',
     name: 'upload',
-    component: upload,
+    component: () => import('@/views/upload-image/upload-image.vue'),
     meta: {
-      title: 'nav.upload'
-    }
+      title: 'nav.upload',
+    },
   },
   {
     path: '/management',
     name: 'Management',
-    component: management,
+    component: () => import('@/views/imgs-management/imgs-management.vue'),
     meta: {
-      title: 'nav.management'
-    }
+      title: 'nav.management',
+    },
   },
   {
     path: '/settings',
     name: 'settings',
-    component: settings,
+    component: () => import('@/views/picx-settings/picx-settings.vue'),
     meta: {
-      title: 'nav.settings'
-    }
-  },
-  {
-    path: '/toolbox',
-    name: 'Toolbox',
-    component: toolbox,
-    meta: {
-      title: 'nav.toolbox'
+      title: 'nav.settings',
     },
-    children: [
-      {
-        path: '/toolbox/compress',
-        name: 'Compress',
-        component: compressTool
-      },
-      {
-        path: '/toolbox/base64',
-        name: 'Base64',
-        component: base64Tool
-      },
-      {
-        path: '/toolbox/watermark',
-        name: 'Watermark',
-        component: watermarkTool
-      }
-    ]
-  },
-  {
-    path: '/feedback',
-    name: 'feedback',
-    component: feedback,
-    meta: {
-      title: 'nav.feedback'
-    }
   },
   {
     path: '/:catchAll(.*)',
-    redirect: '/'
-  }
+    redirect: '/',
+  },
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(),
-  routes
+  history: createWebHashHistory(import.meta.env.BASE_URL),
+  routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to) => {
+  if (to.path !== '/' && readAuthorizationCallback(new URL(window.location.href))) {
+    return { path: '/', query: to.query }
+  }
+  if (['/management', '/settings'].includes(to.path)) {
+    const config = store.getters.getUserConfigInfo
+    if (!config.logined || !config.owner || !config.repo || !config.branch)
+      return connectionLocation(to.path)
+  }
   if (to.meta.title) {
     setWindowTitle(to.meta.title as string)
   }
-  next()
 })
 
 export default router

@@ -1,40 +1,6 @@
-<template>
-  <el-button
-    class="site-announcement-btn border-box"
-    :class="{
-      dot: userSettings.showAnnouncement
-    }"
-    circle
-    text
-    @click="dialogVisible = true"
-  >
-    <el-icon :size="22">
-      <IEpBell />
-    </el-icon>
-  </el-button>
-  <el-dialog
-    v-model="dialogVisible"
-    :title="$t('header.announcement.text_1')"
-    width="500"
-    :modal="false"
-    draggable
-    @close="onClose"
-  >
-    <div class="announcement-item">
-      {{ $t('header.announcement.text_2') }}
-    </div>
-    <div class="announcement-item">
-      {{ $t('header.announcement.text_3') }}
-      <el-link type="primary" target="_blank" href="https://v2.picx.xpoet.cn"> PicX v2.0 </el-link>
-    </div>
-    <template #footer>
-      <el-button @click="notRemindAgain"> {{ $t('header.announcement.text_4') }} </el-button>
-    </template>
-  </el-dialog>
-</template>
-
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import PicxIcon from '@/components/picx-icon/picx-icon.vue'
 import { store } from '@/stores'
 
 const dialogVisible = ref(false)
@@ -43,14 +9,14 @@ const userSettings = computed(() => store.getters.getUserSettings).value
 
 const onClose = () => {
   store.dispatch('SET_GLOBAL_SETTINGS', {
-    showAnnouncement: false
+    showAnnouncement: false,
   })
 }
 
 const notRemindAgain = () => {
   dialogVisible.value = false
   store.dispatch('SET_USER_SETTINGS', {
-    showAnnouncement: false
+    showAnnouncement: false,
   })
 }
 
@@ -60,6 +26,45 @@ onMounted(() => {
   }
 })
 </script>
+
+<template>
+  <el-button
+    class="site-announcement-btn border-box"
+    :class="{
+      dot: userSettings.showAnnouncement,
+    }"
+    :aria-label="$t('header.announcement.text_1')"
+    :title="$t('header.announcement.text_1')"
+    circle
+    text
+    @click="dialogVisible = true"
+  >
+    <PicxIcon name="bell" />
+  </el-button>
+  <el-dialog
+    v-model="dialogVisible"
+    :title="$t('header.announcement.text_1')"
+    width="min(500px, calc(100vw - 32px))"
+    append-to-body
+    @close="onClose"
+  >
+    <div class="announcement-item">
+      <el-link
+        type="primary"
+        target="_blank"
+        href="https://picx.xpoet.cn"
+        rel="noopener noreferrer"
+      >
+        {{ $t('header.announcement.text_2') }}
+      </el-link>
+    </div>
+    <template #footer>
+      <el-button @click="notRemindAgain">
+        {{ $t('header.announcement.text_3') }}
+      </el-button>
+    </template>
+  </el-dialog>
+</template>
 
 <style scoped lang="stylus">
 @import "./site-announcement.styl"

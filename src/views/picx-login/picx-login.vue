@@ -1,166 +1,222 @@
 <template>
-  <div class="page-container login-container">
-    <div class="left-box box-item">
-      <el-button
-        plain
-        type="primary"
-        @click="onGitHubAuthorizeLogin"
-        size="large"
-        :loading="authorizeLoading"
-      >
-        {{ $t('authorization.text_1') }}
-      </el-button>
-      <div class="tips-box">
-        <div class="tip-item">{{ $t('authorization.text_8') }}</div>
-        <div class="tip-item link" @click="goTargetUrl(UrlTypeEnum.oauthLoginDocs)">
-          <el-icon><IEpDocument /></el-icon>
-          {{ $t('authorization.text_10') }}
+  <section class="login-container">
+    <header class="connection-intro">
+      <h1 id="connection-title">
+        {{ $t('connection.title') }}
+      </h1>
+      <p>{{ $t('connection.description') }}</p>
+      <ol class="connection-steps">
+        <li v-for="(step, index) in ['connect', 'configure', 'share']" :key="step" :class="{ active: index === 0 }">
+          <span class="step-number">{{ index + 1 }}</span>
+          {{ $t(`connection.steps.${step}`) }}
+        </li>
+      </ol>
+    </header>
+    <div class="connection-cards">
+      <section class="connection-card">
+        <div class="card-heading">
+          <span class="login-icon"><PicxIcon name="github" :size="28" /></span>
+          <span class="recommended">{{ $t('connection.recommended') }}</span>
         </div>
-        <div class="tip-item link" @click="goTargetUrl(UrlTypeEnum.installGitHubAppURL)">
-          <el-icon><IEpLink /></el-icon>
-          {{ $t('authorization.text_11') }}
-          <el-icon class="install-status" v-if="authorizationInfo.installed">
-            <IEpCircleCheckFilled />
-          </el-icon>
+        <h2 id="oauth-title">
+          {{ $t('authorization.text_1') }}
+        </h2>
+        <p>{{ $t('connection.oauth_description') }}</p>
+        <p class="revocation-note">
+          <PicxIcon name="shield-check" :size="16" />{{ $t('connection.revoke') }}
+        </p>
+        <div v-if="activeMethod === 'oauth' && errorKey" class="connection-error" role="alert">
+          {{ $t(errorKey) }}
         </div>
-      </div>
+        <div class="login-actions">
+          <el-button type="primary" :loading="pending && activeMethod === 'oauth'" :disabled="pending" @click="submitOAuth">
+            <PicxIcon name="github" :size="18" />{{ $t('connection.oauth_continue') }}
+          </el-button>
+          <div class="login-links">
+            <a :href="installURL" target="_blank" rel="noopener noreferrer">{{ $t('authorization.text_11') }}</a>
+            <a href="https://picx-docs.xpoet.cn/usage-guide/config.html#github-oauth-授权登录" target="_blank" rel="noopener noreferrer">{{ $t('connection.oauth_help') }}</a>
+          </div>
+        </div>
+      </section>
+      <form class="connection-card" @submit.prevent="submitToken">
+        <div class="card-heading">
+          <span class="login-icon"><PicxIcon name="key-round" :size="28" /></span>
+        </div>
+        <h2 id="token-title">
+          {{ $t('authorization.text_2') }}
+        </h2>
+        <p id="token-description">
+          {{ $t('connection.token_description') }}
+        </p>
+        <div class="token-field">
+          <label for="connection-token">{{ $t('connection.token_label') }}</label>
+          <div class="token-input-wrap" :class="{ invalid: activeMethod === 'token' && errorKey }">
+            <input
+              id="connection-token"
+              ref="tokenInput"
+              v-model="tokenDraft"
+              :type="tokenVisible ? 'text' : 'password'"
+              :placeholder="$t('config_page.input_token')"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              :disabled="pending"
+              @input="tokenRequired = false"
+            >
+            <button type="button" class="picx-icon-button" :title="$t(tokenVisible ? 'connection.hide_token' : 'connection.show_token')" :disabled="pending" @click="tokenVisible = !tokenVisible">
+              <PicxIcon :name="tokenVisible ? 'eye-off' : 'eye'" :size="18" />
+            </button>
+          </div>
+          <p v-if="activeMethod === 'token' && errorKey" id="token-error" class="connection-error" role="alert">
+            {{ $t(errorKey) }}
+          </p>
+        </div>
+        <div class="login-actions">
+          <el-button native-type="submit" :loading="busy && activeMethod === 'token'" :disabled="pending">
+            <PicxIcon name="key-round" :size="18" />{{ $t('connection.token_continue') }}
+          </el-button>
+          <div class="login-links">
+            <a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener noreferrer">{{ $t('authorization.text_12') }}</a>
+            <a href="https://picx-docs.xpoet.cn/usage-guide/config.html#填写-github-token-登录" target="_blank" rel="noopener noreferrer">{{ $t('connection.token_help') }}</a>
+          </div>
+        </div>
+      </form>
     </div>
-    <div class="right-box box-item">
-      <el-button plain type="primary" size="large" @click="onUseTokenLogin">
-        {{ $t('authorization.text_2') }}
-      </el-button>
-      <div class="tips-box">
-        <div class="tip-item">{{ $t('authorization.text_9') }}</div>
-        <div class="tip-item link" @click="goTargetUrl(UrlTypeEnum.tokenLoginDocs)">
-          <el-icon><IEpDocument /></el-icon>
-          {{ $t('authorization.text_10') }}
-        </div>
-        <div class="tip-item link" @click="goTargetUrl(UrlTypeEnum.generateTokenURL)">
-          <el-icon><IEpLink /></el-icon>
-          {{ $t('authorization.text_12') }}
-        </div>
-      </div>
-    </div>
-  </div>
+    <p v-if="loggedInAccount" class="login-container__account">
+      <PicxIcon name="github" :size="20" />
+      <i18n-t keypath="connection.logged_in_account" tag="span">
+        <template #account>
+          <strong>{{ loggedInAccount }}</strong>
+        </template>
+      </i18n-t>
+    </p>
+    <p v-if="installationReady" class="connection-progress" role="status">
+      {{ $t('connection.installation_ready') }}
+    </p>
+    <p v-if="pending" class="connection-progress" role="status">
+      {{ $t(oauthStarting ? 'connection.redirecting' : progressKey) }}
+    </p>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from 'vue'
-import {
-  githubAppAuthorize,
-  githubAppAuthorizeCallback,
-  isAuthorizeExpire
-} from '@/views/picx-login/picx-login.util'
+/* eslint vue/block-order: ["error", { order: ["template", "script", "style"] }] */
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
+import PicxIcon from '@/components/picx-icon/picx-icon.vue'
+import { useGithubConnection } from '@/composables/use-github-connection'
 import router from '@/router'
 import { store } from '@/stores'
-import { UrlTypeEnum } from '@/views/picx-login/picx-login.model'
+import { cleanConnectionQuery, connectionReturnTo, readAuthorizationCallback } from '@/utils/login-navigation'
+import { githubAppAuthorize, githubAppAuthorizeCallback, isAuthorizeExpire } from './picx-login.util'
 
-const authorizationInfo = computed(() => store.getters.getGitHubAuthorizationInfo).value
-const userConfigInfo = computed(() => store.getters.getUserConfigInfo).value
-
-const authorizeLoading = ref(false)
-
-/**
- * GitHub 授权登录
- */
-const onGitHubAuthorizeLogin = () => {
-  authorizeLoading.value = true
-
-  store.dispatch('SET_GITHUB_AUTHORIZATION_INFO', {
-    isAutoAuthorize: true
-  })
-
-  const { authorized, installed, token } = authorizationInfo
-
-  if (authorized && installed && token && !isAuthorizeExpire()) {
-    store.dispatch('SET_USER_CONFIG_INFO', {
-      token
-    })
-
-    router.push('/config')
-  } else {
-    githubAppAuthorize()
-  }
-}
-
-/**
- * 填写 Token 登录
- */
-const onUseTokenLogin = () => {
-  const { manualToken } = authorizationInfo
-
-  store.dispatch('SET_GITHUB_AUTHORIZATION_INFO', {
-    isAutoAuthorize: false
-  })
-
-  store.dispatch('SET_USER_CONFIG_INFO', {
-    token: manualToken
-  })
-
-  router.push({ path: '/config', query: { focus: '1' } })
-}
-
-const goTargetUrl = (type: UrlTypeEnum) => {
-  let url: string = 'https://picx-docs.xpoet.cn'
-
-  switch (type) {
-    case UrlTypeEnum.installGitHubAppURL:
-      url = import.meta.env.VITE_INSTALL_URL as string
-      if (userConfigInfo.id) {
-        url = import.meta.env.VITE_INSTALL_URL_USER + userConfigInfo.id
-      }
-      window.location.href = url
-      break
-
-    case UrlTypeEnum.oauthLoginDocs:
-      window.open(`${url}/usage-guide/config.html#github-oauth-授权登录`)
-      break
-
-    case UrlTypeEnum.generateTokenURL:
-      window.open('https://github.com/settings/tokens/new')
-      break
-
-    case UrlTypeEnum.tokenLoginDocs:
-      window.open(`${url}/usage-guide/config.html#填写-github-token-登录`)
-      break
-
-    default:
-      window.open(url)
-  }
-}
-
-const init = () => {
-  const { token, name, owner, repo, branch, selectedDir: dir, logined } = userConfigInfo
-
-  if (router.currentRoute.value.query?.jump !== '0') {
-    if (token && name && owner && logined) {
-      if (repo && branch && dir) {
-        router.push('/upload')
-      } else {
-        router.push('/config')
-      }
-    }
-  }
-}
-
-onMounted(() => {
-  githubAppAuthorizeCallback()
-  init()
+const { connection, busy, connect, restore } = useGithubConnection()
+const loggedInAccount = computed(() => {
+  const config = store.getters.getUserConfigInfo
+  return config.logined ? config.owner : ''
 })
+const tokenDraft = ref('')
+const tokenVisible = ref(false)
+const tokenRequired = ref(false)
+const oauthStarting = ref(false)
+const installationReady = ref(false)
+const activeMethod = ref<'token' | 'oauth' | null>(null)
+const tokenInput = useTemplateRef<HTMLInputElement>('tokenInput')
+const pending = computed(() => busy.value || oauthStarting.value)
+const errorKey = computed(() => {
+  if (tokenRequired.value)
+    return 'connection.token_required'
+  if (connection.value.phase !== 'failed' || !activeMethod.value)
+    return ''
+  const kind = connection.value.error.kind
+  return ['app-not-installed', 'initialization-failed', 'storage-unavailable', 'oauth-cancelled'].includes(kind)
+    ? `connection.${kind}`
+    : `request_error.${kind}`
+})
+const progressKey = computed(() => connection.value.phase === 'initializing'
+  ? `connection.step_${connection.value.step}`
+  : 'connection.validating')
+const installURL = computed(() => store.getters.getUserConfigInfo.id
+  ? `${import.meta.env.VITE_INSTALL_URL_USER}${store.getters.getUserConfigInfo.id}`
+  : import.meta.env.VITE_INSTALL_URL)
 
-watch(
-  () => authorizationInfo.authorizing,
-  (nv) => {
-    if (nv) {
-      store.dispatch('SET_GITHUB_AUTHORIZATION_INFO', {
-        authorizing: false
-      })
-      onGitHubAuthorizeLogin()
-    }
+async function submitToken() {
+  if (pending.value)
+    return
+  activeMethod.value = 'token'
+  tokenRequired.value = !tokenDraft.value.trim()
+  if (tokenRequired.value) {
+    tokenInput.value?.focus()
+    return
   }
-)
+  if (await connect(tokenDraft.value.trim())) {
+    tokenDraft.value = ''
+    tokenVisible.value = false
+    await router.replace(connectionReturnTo(router.currentRoute.value.query.returnTo))
+  }
+}
+
+async function submitOAuth() {
+  if (pending.value)
+    return
+  activeMethod.value = 'oauth'
+  tokenRequired.value = false
+  const saved = store.getters.getGitHubAuthorizationInfo
+  if (saved.token && !isAuthorizeExpire()) {
+    if (await connect(saved.token, 'oauth'))
+      await router.replace(connectionReturnTo(router.currentRoute.value.query.returnTo))
+  }
+  else {
+    oauthStarting.value = true
+    githubAppAuthorize(router.currentRoute.value.query.returnTo)
+  }
+}
+
+let entryGeneration = 0
+async function initializeConnectionPage() {
+  const generation = ++entryGeneration
+  oauthStarting.value = true
+  activeMethod.value = 'oauth'
+  const callback = await githubAppAuthorizeCallback()
+  if (generation !== entryGeneration)
+    return
+  oauthStarting.value = false
+  if (callback.handled) {
+    installationReady.value = Boolean(callback.installationReady)
+    if (callback.connected)
+      await router.replace(callback.returnTo)
+    return
+  }
+  activeMethod.value = null
+  const query = router.currentRoute.value.query
+  const target = connectionReturnTo(query.returnTo)
+  if (query.focus === '1') {
+    await router.replace({ path: '/', query: cleanConnectionQuery(query) })
+    await nextTick()
+    tokenInput.value?.focus()
+    return
+  }
+  if (query.auto === '1') {
+    await router.replace({ path: '/', query: cleanConnectionQuery(query) })
+    activeMethod.value = store.getters.getGitHubAuthorizationInfo.isAutoAuthorize ? 'oauth' : 'token'
+    if (await restore())
+      await router.replace(target)
+    return
+  }
+  const config = store.getters.getUserConfigInfo
+  if (query.jump !== '0' && config.token && config.logined && config.owner && config.repo && config.branch) {
+    await router.replace({ path: '/upload', query: config.selectedDir ? {} : { directory: '1' } })
+  }
+}
+
+onMounted(initializeConnectionPage)
+watch(() => router.currentRoute.value.fullPath, () => {
+  const route = router.currentRoute.value
+  if (route.path === '/' && (readAuthorizationCallback(new URL(window.location.href)) || route.query.focus === '1' || route.query.auto === '1')) {
+    initializeConnectionPage()
+  }
+})
 </script>
 
 <style scoped lang="stylus">
-@import "./picx-login.styl"
+@import './picx-login.styl'
 </style>

@@ -1,32 +1,11 @@
-<template>
-  <main class="main-container">
-    <div class="top-container border-box">
-      <header-content />
-    </div>
-    <div class="bottom-container border-box">
-      <div
-        class="bottom-left-box border-box"
-        :class="{ folded: store.getters.getGlobalSettings.folded }"
-      >
-        <nav-content />
-      </div>
-      <div class="bottom-right-box border-box">
-        <router-view />
-      </div>
-    </div>
-  </main>
-</template>
-
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import HeaderContent from '@/components/header-content/header-content.vue'
-import NavContent from '@/components/nav-content/nav-content.vue'
-import themeModeHandle from '@/utils/set-theme-mode'
-import { store } from '@/stores'
 import {
   getCloudDeployInfo,
-  setCloudDeployInfo
+  setCloudDeployInfo,
 } from '@/components/deploy-status-bar/deploy-status-bar.util'
+import HeaderContent from '@/components/header-content/header-content.vue'
+import SiteFooter from '@/components/site-footer/site-footer.vue'
 
 const initDeployStatus = async () => {
   const res = await getCloudDeployInfo()
@@ -36,10 +15,19 @@ const initDeployStatus = async () => {
 }
 
 onMounted(() => {
-  themeModeHandle()
   initDeployStatus()
 })
 </script>
+
+<template>
+  <div class="main-container">
+    <HeaderContent />
+    <main class="main-content border-box">
+      <router-view />
+    </main>
+    <SiteFooter />
+  </div>
+</template>
 
 <style scoped lang="stylus">
 @import "./main-container.styl"

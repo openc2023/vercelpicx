@@ -1,130 +1,142 @@
+<script setup lang="ts">
+import type { ImageHandleResult } from '@/common/model'
+import { computed, onMounted, onUnmounted, ref, useId, useTemplateRef } from 'vue'
+import PicxIcon from '@/components/picx-icon/picx-icon.vue'
+import { useStore } from '@/stores'
+import { gettingFilesHandle, isImage, isVideo } from '@/utils'
+import { workspaceInputBlocked } from '@/utils/workspace-input'
+
+const props = withDefaults(defineProps<{
+  disabled?: boolean
+  videoEnabled?: boolean
+  mode?: 'preview' | 'workspace'
+}>(), { disabled: false, videoEnabled: false, mode: 'preview' })
+const emit = defineEmits<{ getImgList: [files: ImageHandleResult[]], receiving: [active: boolean] }>()
+const store = useStore()
+const inputId = useId()
+const input = useTemplateRef<HTMLInputElement>('input')
+const uploadAreaState = computed(() => store.getters.getUploadAreaState)
+const acceptTypes = computed(() => props.videoEnabled ? 'image/*,video/mp4' : 'image/*')
+const curShowImg = ref<ImageHandleResult | null>(null)
+const imgList = ref<ImageHandleResult[]>([])
+const dragging = ref(false)
+let generation = 0
+let disposed = false
+const activeReads = new Set<symbol>()
+const isVideoPreview = computed(() => curShowImg.value && isVideo(curShowImg.value.file.type))
+const setCurImg = () => curShowImg.value = imgList.value.at(-1) ?? null
+
+async function unifiedHandle(files: File[]) {
+  if (props.disabled || disposed || !files.length)
+    return
+  const current = generation
+  const read = Symbol('file-intake')
+  activeReads.add(read)
+  emit('receiving', true)
+  try {
+    const received: ImageHandleResult[] = []
+    for (const file of files) {
+      const result = await gettingFilesHandle(file, props.videoEnabled)
+      if (props.disabled || current !== generation || disposed)
+        return
+      if (result)
+        received.push(result)
+    }
+    if (!received.length)
+      return
+    if (props.mode === 'preview') {
+      imgList.value = received
+      setCurImg()
+      store.commit('SET_UPLOAD_AREA_STATE', { isActive: true })
+    }
+    emit('getImgList', received)
+  }
+  finally {
+    activeReads.delete(read)
+    if (!disposed)
+      emit('receiving', activeReads.size > 0)
+  }
+}
+
+function selectFiles() {
+  if (!props.disabled)
+    input.value?.click()
+}
+function onSelect(event: Event) {
+  if (!(event.target instanceof HTMLInputElement))
+    return
+  const files = Array.from(event.target.files ?? [])
+  event.target.value = ''
+  void unifiedHandle(files)
+}
+function onDrop(event: DragEvent) {
+  dragging.value = false
+  void unifiedHandle(Array.from(event.dataTransfer?.files ?? []))
+}
+function onPaste(event: ClipboardEvent) {
+  if (props.disabled || workspaceInputBlocked(event.target))
+    return
+  const files = Array.from(event.clipboardData?.items ?? [])
+    .filter(item => item.kind === 'file' && isImage(item.type))
+    .map(item => item.getAsFile())
+    .filter((file): file is File => file !== null)
+  if (files.length) {
+    event.preventDefault()
+    void unifiedHandle(files)
+  }
+}
+function reset() {
+  generation++
+  activeReads.clear()
+  emit('receiving', false)
+  imgList.value = []
+  curShowImg.value = null
+}
+function remove(uuid: string) {
+  imgList.value = imgList.value.filter(item => item.uuid !== uuid)
+  setCurImg()
+}
+onMounted(() => window.addEventListener('paste', onPaste))
+onUnmounted(() => {
+  disposed = true
+  activeReads.clear()
+  generation++
+  window.removeEventListener('paste', onPaste)
+})
+defineExpose({ reset, remove, selectFiles })
+</script>
+
 <template>
   <div
     class="getting-images-container"
-    :class="{ focus: uploadAreaState.isActive && curShowImg.base64, disabled: disabled }"
-    @dragover.prevent
+    :class="{ workspace: mode === 'workspace', focus: uploadAreaState.isActive && curShowImg, dragging, disabled }"
+    @dragover.prevent="dragging = !disabled"
+    @dragleave.prevent="dragging = false"
     @drop.stop.prevent="onDrop"
-    @paste.stop="onPaste"
   >
-    <label for="input-file-selector"></label>
-    <input
-      id="input-file-selector"
-      type="file"
-      accept="image/*"
-      @change="onSelect"
-      multiple="multiple"
-    />
-    <div class="upload-area-tips" v-if="!curShowImg.base64">
-      <el-icon class="icon"><IEpUploadFilled /></el-icon>
-      <div class="text">{{ $t('upload_page.upload_area_text') }}</div>
-    </div>
-    <img class="preview-img" v-if="curShowImg.base64" :src="curShowImg.base64" />
+    <input :id="inputId" ref="input" type="file" :disabled="disabled" :accept="acceptTypes" :title="$t(videoEnabled ? 'upload_workspace.choose' : 'upload_workspace.choose_images')" multiple @change="onSelect">
+    <template v-if="mode === 'workspace'">
+      <span class="upload-symbol"><PicxIcon name="image-up" :size="28" /></span>
+      <h2>{{ $t('upload_workspace.drop') }}</h2>
+      <el-button type="primary" :disabled="disabled" @click="selectFiles">
+        {{ $t('upload_workspace.choose') }}
+      </el-button>
+      <p>{{ $t('upload_workspace.accept') }}</p>
+    </template>
+
+    <template v-else>
+      <label :for="inputId" class="preview-select" tabindex="0" :title="$t('upload_workspace.choose_images')" @keydown.enter.prevent="selectFiles" @keydown.space.prevent="selectFiles" />
+      <div v-if="!curShowImg" class="upload-area-tips">
+        <PicxIcon name="image-up" :size="80" />
+        <div class="text">
+          {{ $t('upload_page.upload_area_text') }}
+        </div>
+      </div>
+      <video v-else-if="isVideoPreview" class="preview-video" :src="curShowImg.base64" controls muted loop preload="metadata" />
+      <img v-else class="preview-img" :src="curShowImg.base64" :alt="curShowImg.file.name">
+    </template>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useStore } from '@/stores'
-import { gettingFilesHandle, isImage } from '@/utils'
-import { ImageHandleResult } from '@/common/model'
-
-const store = useStore()
-
-const uploadAreaState = computed(() => store.getters.getUploadAreaState)
-
-const curShowImg = ref<{ uuid: string; base64: string }>({
-  uuid: '',
-  base64: ''
-})
-const imgList = ref<ImageHandleResult[]>([])
-
-const emit = defineEmits(['getImgList'])
-
-defineProps({
-  disabled: {
-    type: Boolean,
-    default: false
-  }
-})
-
-const setCurImg = () => {
-  const len = imgList.value.length
-  const tmpImg = len > 0 ? imgList.value[len - 1] : { uuid: '', base64: '' }
-  curShowImg.value = {
-    uuid: tmpImg.uuid,
-    base64: tmpImg.base64
-  }
-}
-
-const unifiedHandle = async (files: File[]) => {
-  if (!files.length) {
-    return
-  }
-
-  imgList.value = []
-
-  // eslint-disable-next-line no-restricted-syntax
-  for (const file of files) {
-    const res = await gettingFilesHandle(file)
-    if (res) {
-      imgList.value.push(res)
-    }
-  }
-
-  setCurImg()
-
-  store.commit('SET_UPLOAD_AREA_STATE', {
-    isActive: true
-  })
-
-  emit('getImgList', imgList.value)
-}
-
-const onSelect = async (e: any) => {
-  const input = e.target
-  await unifiedHandle(input.files)
-  input.value = '' // 清空 input 元素的 value 属性，强制每次触发 onchange 事件
-  input.value = input.defaultValue
-}
-
-const onDrop = async (e: any) => {
-  await unifiedHandle(e.dataTransfer.files)
-}
-
-const onPaste = async (e: any) => {
-  const files = Array.from(e.clipboardData.items)
-    .filter((v: any) => v.kind === 'file' && isImage(v.type))
-    .map((x: any) => x.getAsFile())
-  await unifiedHandle(files)
-}
-
-const reset = () => {
-  imgList.value = []
-  curShowImg.value.uuid = ''
-  curShowImg.value.base64 = ''
-}
-
-const remove = (uuid: string) => {
-  const rmIdx = imgList.value.findIndex((v) => v.uuid === uuid)
-  if (rmIdx !== -1) {
-    imgList.value.splice(rmIdx, 1)
-  }
-
-  if (uuid === curShowImg.value.uuid) {
-    setCurImg()
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('paste', onPaste)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('paste', onPaste)
-})
-
-defineExpose({ reset, remove })
-</script>
 
 <style scoped lang="stylus">
 @import "./getting-images.styl"

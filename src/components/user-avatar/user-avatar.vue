@@ -1,3 +1,40 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useStore } from '@/stores'
+import { getGitHubOwnerURL } from '@/utils'
+import { connectionLocation } from '@/utils/login-navigation'
+
+const router = useRouter()
+const store = useStore()
+
+const userConfigInfo = computed(() => store.getters.getUserConfigInfo).value
+
+const onLogin = () => {
+  router.push(connectionLocation(router.currentRoute.value.path))
+  document.body.click()
+}
+
+// 退出登录
+const onLogout = () => {
+  store.dispatch('LOGOUT')
+  router.push(connectionLocation(router.currentRoute.value.path))
+  document.body.click()
+  setTimeout(() => {
+    window.location.reload()
+  })
+}
+
+const jumpOwnerRepo = () => {
+  if (userConfigInfo.owner) {
+    window.open(getGitHubOwnerURL(userConfigInfo))
+  }
+  else {
+    router.push(connectionLocation('/upload'))
+  }
+}
+</script>
+
 <template>
   <el-popover
     placement="right-end"
@@ -5,9 +42,9 @@
     width="220rem"
     :show-arrow="false"
     :popper-style="{
-      padding: '0',
+      'padding': '0',
       'border-radius': '10rem',
-      overflow: 'hidden'
+      'overflow': 'hidden',
     }"
   >
     <template #reference>
@@ -18,11 +55,13 @@
         <div class="left">
           <div class="avatar flex-center">
             <img
-              :src="userConfigInfo?.avatarUrl"
               v-if="userConfigInfo?.avatarUrl"
+              :src="userConfigInfo?.avatarUrl"
               :alt="userConfigInfo?.owner"
-            />
-            <el-icon class="user-filled-icon" v-else><IEpUserFilled /></el-icon>
+            >
+            <el-icon v-else class="user-filled-icon">
+              <IEpUserFilled />
+            </el-icon>
           </div>
           <div class="username" @click="jumpOwnerRepo">
             {{ userConfigInfo.owner ? userConfigInfo.owner : $t('header.not_login') }}
@@ -30,64 +69,35 @@
         </div>
 
         <div class="right">
-          <el-icon class="popover-tip-icon"><IEpCaretRight /></el-icon>
+          <el-icon class="popover-tip-icon">
+            <IEpCaretRight />
+          </el-icon>
         </div>
       </div>
     </template>
     <ul class="personal-center-popover border-box">
-      <li class="user-info border-box" v-if="userConfigInfo.logined">
-        <div class="info-item owner" v-if="userConfigInfo.owner">{{ userConfigInfo.owner }}</div>
-        <div class="info-item name" v-if="userConfigInfo.email">{{ userConfigInfo.email }}</div>
+      <li v-if="userConfigInfo.logined" class="user-info border-box">
+        <div v-if="userConfigInfo.owner" class="info-item owner">
+          {{ userConfigInfo.owner }}
+        </div>
+        <div v-if="userConfigInfo.email" class="info-item name">
+          {{ userConfigInfo.email }}
+        </div>
       </li>
       <el-divider v-if="userConfigInfo.logined" style="margin: 5rem 0" />
       <li
-        class="content-item border-box"
         v-if="userConfigInfo.name || userConfigInfo.owner"
+        class="content-item border-box"
         @click="onLogout"
       >
         {{ $t('logout') }}
       </li>
-      <li class="content-item border-box" v-else @click="onLogin">
+      <li v-else class="content-item border-box" @click="onLogin">
         {{ $t('login') }}
       </li>
     </ul>
   </el-popover>
 </template>
-
-<script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useStore } from '@/stores'
-import { getGitHubOwnerURL } from '@/utils'
-
-const router = useRouter()
-const store = useStore()
-
-const userConfigInfo = computed(() => store.getters.getUserConfigInfo).value
-
-const onLogin = () => {
-  router.push('/login')
-  document.body.click()
-}
-
-// 退出登录
-const onLogout = () => {
-  store.dispatch('LOGOUT')
-  router.push('/login')
-  document.body.click()
-  setTimeout(() => {
-    window.location.reload()
-  })
-}
-
-const jumpOwnerRepo = () => {
-  if (userConfigInfo.owner) {
-    window.open(getGitHubOwnerURL(userConfigInfo))
-  } else {
-    router.push('/config')
-  }
-}
-</script>
 
 <style scoped lang="stylus">
 @import "user-avatar.styl"

@@ -1,9 +1,8 @@
+import type { ImageHandleResult } from '@/common/model'
 import { ElMessage } from 'element-plus'
-import { ImageHandleResult } from '@/common/model'
-import { getUuid } from '@/utils/common-utils'
-import { imgFileToBase64 } from '@/utils/image-utils'
-import { IMG_UPLOAD_MAX_SIZE } from '@/common/constant'
+import { IMG_UPLOAD_MAX_SIZE, VIDEO_UPLOAD_MAX_SIZE } from '@/common/constant'
 import i18n from '@/plugins/vue/i18n'
+import { imgFileToBase64 } from '@/utils/image-utils'
 
 /**
  * 获取文件名
@@ -11,7 +10,7 @@ import i18n from '@/plugins/vue/i18n'
  */
 export const getFilename = (filename: string) => {
   const splitIndex = filename.lastIndexOf('.')
-  return filename.substring(0, splitIndex).trim().replace(/\s+/g, '-')
+  return (splitIndex > 0 ? filename.slice(0, splitIndex) : filename).trim().replace(/\s+/g, '-')
 }
 
 /**
@@ -29,9 +28,17 @@ export const getFileSuffix = (filename: string) => {
  */
 export const isImage = (fileType: string): boolean => {
   fileType = fileType.toLowerCase()
-  return /(png|jpg|jpeg|gif|webp|awebp|avif|svg\+xml|svg|x-icon|vnd.microsoft.icon|ico)$/.test(
-    fileType
+  return /(?:png|jpg|jpeg|gif|webp|awebp|avif|svg\+xml|svg|x-icon|vnd.microsoft.icon|ico)$/.test(
+    fileType,
   )
+}
+
+/**
+ * 判断文件类型是否为视频格式（当前仅支持 MP4，MIME 类型或文件名后缀均可）
+ * @param fileType
+ */
+export const isVideo = (fileType: string): boolean => {
+  return fileType.toLowerCase().endsWith('mp4')
 }
 
 /**
@@ -40,7 +47,7 @@ export const isImage = (fileType: string): boolean => {
  */
 export const isNeedCompress = (imageType: string): boolean => {
   imageType = imageType.toLowerCase()
-  return /(png|jpg|jpeg|webp|avif)$/.test(imageType)
+  return /(?:png|jpg|jpeg|webp|avif)$/.test(imageType)
 }
 
 /**
@@ -49,7 +56,7 @@ export const isNeedCompress = (imageType: string): boolean => {
  */
 export const isNeedWatermark = (imageType: string): boolean => {
   imageType = imageType.toLowerCase()
-  return /(png|jpg|jpeg|webp|avif)$/.test(imageType)
+  return /(?:png|jpg|jpeg|webp|avif)$/.test(imageType)
 }
 
 /**
@@ -64,34 +71,40 @@ export const getFileSize = (size: number) => {
 }
 
 /**
- * 处理获取的图片文件
+ * 处理获取的文件（图片或视频）
  * @param file
+ * @param allowVideo 是否允许视频格式，默认只允许图片
  */
-export const gettingFilesHandle = (file: File): Promise<ImageHandleResult | null> => {
-  // eslint-disable-next-line no-async-promise-executor
-  return new Promise(async (resolve) => {
-    if (!file) {
-      resolve(null)
-    }
+export function validateUploadFile(file: File, allowVideo = false): { ok: true } | { ok: false, reason: 'type' | 'size', maxSize: number } {
+  const video = allowVideo && isVideo(file.type)
+  const maxSize = video ? VIDEO_UPLOAD_MAX_SIZE : IMG_UPLOAD_MAX_SIZE
+  if (!isImage(file.type) && !video)
+    return { ok: false, reason: 'type', maxSize }
+  return file.size <= maxSize * 1024 * 1024 ? { ok: true } : { ok: false, reason: 'size', maxSize }
+}
 
-    if (!isImage(file.type)) {
-      ElMessage.error(i18n.global.t('upload_page.tip_9', { name: file.name }))
-      resolve(null)
-    }
+export async function gettingFilesHandle(file: File, allowVideo = false): Promise<ImageHandleResult | null> {
+  const validation = validateUploadFile(file, allowVideo)
+  if (!validation.ok) {
+    ElMessage.error(validation.reason === 'type'
+      ? i18n.global.t('upload_page.tip_9', { name: file.name })
+      : i18n.global.t('upload_page.tip_10', { name: file.name, size: validation.maxSize }))
+    return null
+  }
+  const base64 = await imgFileToBase64(file)
+  if (!base64) {
+    ElMessage.error(i18n.global.t('upload_workspace.read_failed', { name: file.name }))
+    return null
+  }
+  return { uuid: crypto.randomUUID(), base64, file }
+}
 
-    const base64 = (await imgFileToBase64(file)) || ''
-
-    if (getFileSize(base64.length) >= IMG_UPLOAD_MAX_SIZE * 1024) {
-      ElMessage.error(
-        i18n.global.t('upload_page.tip_10', { name: file.name, size: IMG_UPLOAD_MAX_SIZE })
-      )
-      resolve(null)
-    }
-
-    resolve({
-      uuid: getUuid(),
-      base64,
-      file
-    })
-  })
+/** 未知大小不伪装为 0 KB；零字节显式显示 0 B。 */
+export function formatFileBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes))
+    return '—'
+  if (bytes < 1024)
+    return `${bytes} B`
+  const unit = bytes < 1024 * 1024 ? 'KB' : 'MB'
+  return `${Number((bytes / (unit === 'KB' ? 1024 : 1024 * 1024)).toFixed(2))} ${unit}`
 }

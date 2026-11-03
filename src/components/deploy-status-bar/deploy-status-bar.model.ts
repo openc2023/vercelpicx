@@ -1,6 +1,10 @@
+export interface DeployStatusBarProps {
+  disabled?: boolean
+  compact?: boolean
+}
+
 export enum DeployServerEnum {
-  // eslint-disable-next-line no-unused-vars
   githubPages,
-  // eslint-disable-next-line no-unused-vars
-  vervel
+
+  vervel,
 }

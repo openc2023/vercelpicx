@@ -1,60 +1,40 @@
 <template>
-  <div class="tools-bar border-box">
-    <div class="left flex-start">
-      <el-button text circle :disabled="userConfigInfo.viewDir === '/'" @click="onBack">
-        <el-icon :size="18">
-          <IEpArrowLeftBold></IEpArrowLeftBold>
-        </el-icon>
+  <div class="tools-bar">
+    <button class="directory-back" type="button" :title="$t('management_page.workspace.back')" :disabled="busy || path === '/'" @click="emit('browse', parent)">
+      <PicxIcon name="arrow-left" />
+    </button>
+    <nav class="directory-breadcrumbs" tabindex="0">
+      <PicxIcon name="folder-open" />
+      <ol>
+        <li v-for="(item, index) in breadcrumbs" :key="item.path">
+          <PicxIcon v-if="index" name="chevron-right" :size="16" />
+          <button type="button" :disabled="busy" :class="{ 'is-current': item.path === path }" @click="emit('browse', item.path)">
+            {{ item.name }}
+          </button>
+        </li>
+      </ol>
+    </nav>
+    <div class="directory-tools">
+      <slot />
+      <el-button :title="$t('management_page.reload')" :loading="loading" :disabled="loading || busy" @click="emit('reload')">
+        <PicxIcon v-if="!loading" name="refresh-cw" />
       </el-button>
-
-      <div class="dir-info flex-start">
-        <el-icon><IEpFolder /></el-icon>
-        {{ userConfigInfo.viewDir.split('/').join(' / ') }}
-      </div>
-    </div>
-    <div class="right flex-end">
-      <copy-source-repo position="management" />
-      <el-tooltip
-        placement="top"
-        :content="$t('management_page.reload')"
-        :show-arrow="false"
-        :offset="6"
-      >
-        <el-icon class="btn-icon" @click.stop="emits('reload')">
-          <IEpRefresh />
-        </el-icon>
-      </el-tooltip>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+/* eslint vue/block-order: ["error", { order: ["template", "script", "style"] }] */
 import { computed } from 'vue'
-import { store } from '@/stores'
+import PicxIcon from '@/components/picx-icon/picx-icon.vue'
+import { directoryBreadcrumbs } from '@/utils/management-utils'
 
-const emits = defineEmits(['reload'])
-
-const userConfigInfo = computed(() => store.getters.getUserConfigInfo).value
-
-const onBack = () => {
-  const currentDir = userConfigInfo.viewDir
-
-  if (currentDir === '/') {
-    return
-  }
-
-  const currentDirList = currentDir.split('/')
-
-  if (currentDirList.length === 1) {
-    userConfigInfo.viewDir = '/'
-  } else if (currentDirList.length > 1) {
-    currentDirList.length -= 1
-    userConfigInfo.viewDir = currentDirList.join('/')
-  }
-  store.dispatch('USER_CONFIG_INFO_PERSIST')
-}
+const props = defineProps<{ path: string, loading: boolean, busy: boolean }>()
+const emit = defineEmits<{ browse: [path: string], reload: [] }>()
+const breadcrumbs = computed(() => directoryBreadcrumbs(props.path))
+const parent = computed(() => breadcrumbs.value.at(-2)?.path ?? '/')
 </script>
 
 <style scoped lang="stylus">
-@import "tools-bar.styl"
+@import './tools-bar.styl'
 </style>
